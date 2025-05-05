@@ -26,8 +26,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <!-- کلاس اصلی این ماژول رو بعدا اینجا مشخص می کنیم -->
-                            <!-- <mainClass>com.example.news.feed.MockNewsFeedApp</mainClass> -->
+                            <mainClass>com.example.news.feed.MockNewsFeedApp</mainClass>
                         </manifest>
                     </archive>
                     <descriptorRefs>
