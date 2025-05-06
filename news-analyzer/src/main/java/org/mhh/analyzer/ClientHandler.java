@@ -8,15 +8,17 @@ import org.mhh.common.NewsItem;
 
 import java.io.EOFException;
 import java.io.IOException;
-import java.io.ObjectInputStream;import java.net.Socket;
+import java.io.ObjectInputStream;
+import java.net.Socket;
 import java.net.SocketException;
 
 public class ClientHandler implements Runnable {
-
     private final Socket clientSocket;
+    private final HeadlineAnalyzer analyzer;
 
     public ClientHandler(Socket socket) {
         this.clientSocket = socket;
+        this.analyzer = new HeadlineAnalyzer();
         System.out.println("Handler created for client: " + getClientIdentifier());
     }
 
@@ -26,9 +28,14 @@ public class ClientHandler implements Runnable {
         try (ObjectInputStream in = new ObjectInputStream(clientSocket.getInputStream())) {
             Object receivedObject;
             while (true) {
-                receivedObject = in.readObject();                if (receivedObject instanceof NewsItem) {
+                receivedObject = in.readObject();
+                if (receivedObject instanceof NewsItem) {
                     NewsItem receivedItem = (NewsItem) receivedObject;
                     System.out.println("Received from [" + getClientIdentifier() + "]: " + receivedItem.getHeadline());
+
+                    HeadlineAnalyzer.AnalysisResult result = analyzer.analyze(receivedItem.getHeadline());
+                    System.out.println("Analysis for \"" + receivedItem.getHeadline() + "\": " + result);
+
                 } else {
                     System.err.println("Received unexpected object type from "
                             + getClientIdentifier() + ": " + (receivedObject != null ? receivedObject.getClass().getName() : "null"));
@@ -39,7 +46,8 @@ public class ClientHandler implements Runnable {
         } catch (SocketException e) {
             System.err.println("Socket Exception for " + getClientIdentifier() + ": " + e.getMessage() + " (Client likely disconnected)");
         } catch (IOException e) {
-            System.err.println("I/O Error handling client " + getClientIdentifier() + ": " + e.getMessage());        } catch (ClassNotFoundException e) {
+            System.err.println("I/O Error handling client " + getClientIdentifier() + ": " + e.getMessage());
+        } catch (ClassNotFoundException e) {
             System.err.println("Error: Received object of unknown class from " + getClientIdentifier() + ": " + e.getMessage());
         } finally {
             try {
