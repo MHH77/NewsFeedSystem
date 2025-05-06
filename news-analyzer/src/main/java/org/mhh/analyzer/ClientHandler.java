@@ -4,12 +4,11 @@ package org.mhh.analyzer;
  * @auther:MHEsfandiari
  */
 
-
 import org.mhh.common.NewsItem;
 
+import java.io.EOFException;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.net.Socket;
+import java.io.ObjectInputStream;import java.net.Socket;
 import java.net.SocketException;
 
 public class ClientHandler implements Runnable {
@@ -25,25 +24,22 @@ public class ClientHandler implements Runnable {
     public void run() {
         System.out.println("Handler thread started for: " + getClientIdentifier());
         try (ObjectInputStream in = new ObjectInputStream(clientSocket.getInputStream())) {
-
-            Object receivedObject = in.readObject();
-
-            if (receivedObject instanceof NewsItem) {
-                NewsItem receivedItem = (NewsItem) receivedObject;
-                System.out.println("Received from [" + getClientIdentifier() + "]: " + receivedItem);
-
-                // TODO: Analyze the received item using HeadlineAnalyzer
-
-            } else {
-                System.err.println("Received unexpected object type from "
-                        + getClientIdentifier() + ": " + receivedObject.getClass().getName());
+            Object receivedObject;
+            while (true) {
+                receivedObject = in.readObject();                if (receivedObject instanceof NewsItem) {
+                    NewsItem receivedItem = (NewsItem) receivedObject;
+                    System.out.println("Received from [" + getClientIdentifier() + "]: " + receivedItem.getHeadline());
+                } else {
+                    System.err.println("Received unexpected object type from "
+                            + getClientIdentifier() + ": " + (receivedObject != null ? receivedObject.getClass().getName() : "null"));
+                }
             }
-
+        } catch (EOFException e) {
+            System.out.println("Client " + getClientIdentifier() + " finished sending data and closed the connection (EOF).");
         } catch (SocketException e) {
             System.err.println("Socket Exception for " + getClientIdentifier() + ": " + e.getMessage() + " (Client likely disconnected)");
         } catch (IOException e) {
-            System.err.println("I/O Error handling client " + getClientIdentifier() + ": " + e.getMessage());
-        } catch (ClassNotFoundException e) {
+            System.err.println("I/O Error handling client " + getClientIdentifier() + ": " + e.getMessage());        } catch (ClassNotFoundException e) {
             System.err.println("Error: Received object of unknown class from " + getClientIdentifier() + ": " + e.getMessage());
         } finally {
             try {
