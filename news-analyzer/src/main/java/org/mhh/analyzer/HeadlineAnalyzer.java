@@ -1,4 +1,4 @@
-package org.mhh.domain;
+package org.mhh.analyzer;
 
 import java.util.Arrays;
 import java.util.Collections;

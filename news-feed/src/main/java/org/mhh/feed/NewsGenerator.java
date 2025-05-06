@@ -1,4 +1,6 @@
-package org.mhh.domain;
+package org.mhh.feed;
+
+import org.mhh.common.NewsItem;
 
 import java.util.Arrays;
 import java.util.Collections;

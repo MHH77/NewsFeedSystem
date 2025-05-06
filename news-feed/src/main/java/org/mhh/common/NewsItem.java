@@ -1,4 +1,4 @@
-package org.mhh.domain;
+package org.mhh.common;
 
 import lombok.Value;
 
