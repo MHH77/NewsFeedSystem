@@ -11,14 +11,17 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.function.BiConsumer;
 
 public class ClientHandler implements Runnable {
     private final Socket clientSocket;
     private final HeadlineAnalyzer analyzer;
+    private final BiConsumer<NewsItem, HeadlineAnalyzer.AnalysisResult> analysisRecorder;
 
-    public ClientHandler(Socket socket) {
+    public ClientHandler(Socket socket, HeadlineAnalyzer analyzer, BiConsumer<NewsItem, HeadlineAnalyzer.AnalysisResult> recorder) {
         this.clientSocket = socket;
-        this.analyzer = new HeadlineAnalyzer();
+        this.analyzer = analyzer;
+        this.analysisRecorder = recorder;
         System.out.println("Handler created for client: " + getClientIdentifier());
     }
 
@@ -35,6 +38,10 @@ public class ClientHandler implements Runnable {
 
                     HeadlineAnalyzer.AnalysisResult result = analyzer.analyze(receivedItem.getHeadline());
                     System.out.println("Analysis for \"" + receivedItem.getHeadline() + "\": " + result);
+
+                    if (analysisRecorder != null) {
+                        analysisRecorder.accept(receivedItem, result);
+                    }
 
                 } else {
                     System.err.println("Received unexpected object type from "
