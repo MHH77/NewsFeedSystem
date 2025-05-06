@@ -15,7 +15,7 @@ import java.util.concurrent.Executors;
 
 public class NewsAnalyzerServer {
 
-    private static final int DEFAULT_PORT = 9091;
+    private static final int DEFAULT_PORT = 9090;
     private static final int MAX_THREADS = 10; // Limit number of concurrent handlers
 
     public static void main(String[] args) {
