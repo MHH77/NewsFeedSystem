@@ -1,0 +1,11 @@
+AnalysisTimestamp,Headline,Priority,AnalysisResult
+"2025-05-17T21:38:26.8235675+03:30","high high failure up success",4,NEUTRAL
+"2025-05-17T21:38:28.8186941+03:30","failure low down low",1,NEGATIVE
+"2025-05-17T21:38:30.8193194+03:30","failure rise down up",6,NEGATIVE
+"2025-05-17T21:38:32.8322249+03:30","down bad good down",1,NEUTRAL
+"2025-05-17T21:38:34.83608+03:30","rise failure fall failure",9,NEGATIVE
+"2025-05-17T21:38:51.8240625+03:30","rise low down up",3,NEUTRAL
+"2025-05-17T21:38:53.8268639+03:30","fall failure fall",0,NEGATIVE
+"2025-05-17T21:38:55.8303879+03:30","high failure fall low bad",3,NEGATIVE
+"2025-05-17T21:38:57.8379402+03:30","bad fall failure",0,NEGATIVE
+"2025-05-17T21:38:59.8534273+03:30","down good high up",0,POSITIVE
