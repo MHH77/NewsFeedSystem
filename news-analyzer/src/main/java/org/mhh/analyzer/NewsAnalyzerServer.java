@@ -15,10 +15,9 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.Map;
+import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 public class NewsAnalyzerServer {
 
@@ -26,24 +25,33 @@ public class NewsAnalyzerServer {
     private static final int MAX_THREADS = 10;
     private static final String CSV_FILE_NAME = "analyzed_news_items.csv";
     private static final DateTimeFormatter CSV_TIMESTAMP_FORMATTER = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
-
+    private static final long STATS_UPDATE_INTERVAL_SECONDS = 10; // هر 10 ثانیه آمار را نمایش بده
 
     private final int port;
     private final ExecutorService clientExecutor;
+    private final ScheduledExecutorService statsExecutor; // برای نمایش آمار
     private final HeadlineAnalyzer headlineAnalyzer;
     private final List<AnalyzedNewsItem> analyzedItemsStore;
 
     public NewsAnalyzerServer(int port, int maxThreads) {
         this.port = port;
         this.clientExecutor = Executors.newFixedThreadPool(maxThreads);
+        this.statsExecutor = Executors.newSingleThreadScheduledExecutor(); // یک نخ برای نمایش آمار کافی است
         this.headlineAnalyzer = new HeadlineAnalyzer();
         this.analyzedItemsStore = new CopyOnWriteArrayList<>();
     }
 
     public void startServer() {
+        // شروع نمایش دوره‌ای آمار
+        statsExecutor.scheduleAtFixedRate(this::printLiveStatistics,
+                STATS_UPDATE_INTERVAL_SECONDS,
+                STATS_UPDATE_INTERVAL_SECONDS,
+                TimeUnit.SECONDS);
+
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("News Analyzer Server started on port " + port + ". Max concurrent clients: " + MAX_THREADS);
             System.out.println("Results will be saved to " + CSV_FILE_NAME + " upon shutdown.");
+            System.out.println("Live statistics will be updated every " + STATS_UPDATE_INTERVAL_SECONDS + " seconds.");
             System.out.println("Waiting for connections...");
 
             while (!Thread.currentThread().isInterrupted()) {
@@ -67,7 +75,7 @@ public class NewsAnalyzerServer {
         } catch (IllegalArgumentException illegalArgEx) {
             System.err.println("Invalid port specified: " + port + ". " + illegalArgEx.getMessage());
         } finally {
-            shutdownClientExecutor();
+            shutdownExecutors();
             System.out.println("News Analyzer Server process finished.");
         }
     }
@@ -78,21 +86,51 @@ public class NewsAnalyzerServer {
         System.out.println("SERVER_STORAGE: Recorded item. Total stored: " + this.analyzedItemsStore.size());
     }
 
-    private void shutdownClientExecutor() {
+    private void printLiveStatistics() {
+        if (analyzedItemsStore.isEmpty()) {
+            System.out.println("\n[STATS] No items analyzed yet in this session.");
+            return;
+        }
+
+        Map<HeadlineAnalyzer.AnalysisResult, Long> counts = analyzedItemsStore.stream()
+                .collect(Collectors.groupingBy(AnalyzedNewsItem::getResult, Collectors.counting()));
+
+        long total = analyzedItemsStore.size();
+        long positive = counts.getOrDefault(HeadlineAnalyzer.AnalysisResult.POSITIVE, 0L);
+        long negative = counts.getOrDefault(HeadlineAnalyzer.AnalysisResult.NEGATIVE, 0L);
+        long neutral = counts.getOrDefault(HeadlineAnalyzer.AnalysisResult.NEUTRAL, 0L);
+
+        System.out.printf("%n[STATS @ %s]%n", java.time.LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+        System.out.printf("  Total Analyzed: %d%n", total);
+        System.out.printf("  Positive: %d (%.1f%%)%n", positive, (total > 0 ? (double) positive / total * 100 : 0.0));
+        System.out.printf("  Negative: %d (%.1f%%)%n", negative, (total > 0 ? (double) negative / total * 100 : 0.0));
+        System.out.printf("  Neutral:  %d (%.1f%%)%n", neutral, (total > 0 ? (double) neutral / total * 100 : 0.0));
+    }
+
+    private void shutdownExecutors() {
         System.out.println("Attempting to shut down client handler executor...");
         clientExecutor.shutdown();
+        System.out.println("Attempting to shut down stats executor...");
+        statsExecutor.shutdown();
         try {
             if (!clientExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
                 clientExecutor.shutdownNow();
                 if (!clientExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                    System.err.println("Executor did not terminate.");
+                    System.err.println("Client executor did not terminate.");
+                }
+            }
+            if (!statsExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                statsExecutor.shutdownNow();
+                if (!statsExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    System.err.println("Stats executor did not terminate.");
                 }
             }
         } catch (InterruptedException ie) {
             clientExecutor.shutdownNow();
+            statsExecutor.shutdownNow();
             Thread.currentThread().interrupt();
         }
-        System.out.println("Client handler executor shutdown complete.");
+        System.out.println("All executors shutdown complete.");
     }
 
     private void saveAndPrintAnalyzedItems() {
@@ -102,8 +140,9 @@ public class NewsAnalyzerServer {
             return;
         }
 
-        // Print to console        this.analyzedItemsStore.forEach(System.out::println);
-        System.out.println("--- End of Console Print ---");
+        // Print to console (optional, as live stats might be enough during runtime)
+        // this.analyzedItemsStore.forEach(System.out::println);
+        // System.out.println("--- End of Console Print ---");
 
         // Save to CSV
         try (PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(CSV_FILE_NAME, true)))) { // true for append mode
@@ -123,8 +162,6 @@ public class NewsAnalyzerServer {
                         item.getResult().name());
             }
             System.out.println("Successfully saved " + this.analyzedItemsStore.size() + " analyzed items to " + CSV_FILE_NAME);
-            // Clear the in-memory store after saving if you only want to save new items each run
-            // this.analyzedItemsStore.clear(); // Optional: if you want each run to have its own distinct set in memory until shutdown.
 
         } catch (IOException e) {
             System.err.println("Error writing analyzed items to CSV file " + CSV_FILE_NAME + ": " + e.getMessage());
@@ -150,10 +187,18 @@ public class NewsAnalyzerServer {
         NewsAnalyzerServer server = new NewsAnalyzerServer(portArg, MAX_THREADS);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("Shutdown hook triggered. Saving and printing analyzed items...");
+            System.out.println("Shutdown hook triggered. Stopping live stats and saving analyzed items...");
+            if (!server.statsExecutor.isShutdown()) { // Ensure stats executor is stopped first
+                server.statsExecutor.shutdownNow();
+                try {
+                    server.statsExecutor.awaitTermination(2, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
             server.saveAndPrintAnalyzedItems();
+            // clientExecutor is shut down in the main server's finally block
         }));
-
         server.startServer();
     }
 }
