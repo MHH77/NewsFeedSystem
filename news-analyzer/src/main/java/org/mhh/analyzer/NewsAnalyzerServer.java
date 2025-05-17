@@ -7,9 +7,13 @@ package org.mhh.analyzer;
 import org.mhh.common.AnalyzedNewsItem;
 import org.mhh.common.NewsItem;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -20,6 +24,9 @@ public class NewsAnalyzerServer {
 
     private static final int DEFAULT_PORT = 9090;
     private static final int MAX_THREADS = 10;
+    private static final String CSV_FILE_NAME = "analyzed_news_items.csv";
+    private static final DateTimeFormatter CSV_TIMESTAMP_FORMATTER = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+
 
     private final int port;
     private final ExecutorService clientExecutor;
@@ -36,6 +43,7 @@ public class NewsAnalyzerServer {
     public void startServer() {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("News Analyzer Server started on port " + port + ". Max concurrent clients: " + MAX_THREADS);
+            System.out.println("Results will be saved to " + CSV_FILE_NAME + " upon shutdown.");
             System.out.println("Waiting for connections...");
 
             while (!Thread.currentThread().isInterrupted()) {
@@ -87,15 +95,43 @@ public class NewsAnalyzerServer {
         System.out.println("Client handler executor shutdown complete.");
     }
 
-    private void printAllAnalyzedItems() {
-        System.out.println("\n--- All Analyzed Items (" + this.analyzedItemsStore.size() + ") ---");
+    private void saveAndPrintAnalyzedItems() {
+        System.out.println("\n--- Saving and Printing All Analyzed Items (" + this.analyzedItemsStore.size() + ") ---");
         if (this.analyzedItemsStore.isEmpty()) {
             System.out.println("No items were analyzed and stored in this session.");
-        } else {
-            this.analyzedItemsStore.forEach(System.out::println);
+            return;
         }
-        System.out.println("--- End of Analyzed Items ---");
+
+        // Print to console        this.analyzedItemsStore.forEach(System.out::println);
+        System.out.println("--- End of Console Print ---");
+
+        // Save to CSV
+        try (PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(CSV_FILE_NAME, true)))) { // true for append mode
+            boolean fileIsEmpty = new java.io.File(CSV_FILE_NAME).length() == 0;
+            if (fileIsEmpty) {
+                writer.println("AnalysisTimestamp,Headline,Priority,AnalysisResult"); // CSV Header
+            }
+            for (AnalyzedNewsItem item : this.analyzedItemsStore) {
+                NewsItem original = item.getOriginalItem();
+                String headline = (original != null && original.getHeadline() != null) ? original.getHeadline().replace("\"", "\"\"") : ""; // Escape quotes for CSV
+                int priority = (original != null) ? original.getPriority() : -1;
+
+                writer.printf("\"%s\",\"%s\",%d,%s%n",
+                        item.getAnalysisTimestamp().atZone(java.time.ZoneId.systemDefault()).format(CSV_TIMESTAMP_FORMATTER),
+                        headline,
+                        priority,
+                        item.getResult().name());
+            }
+            System.out.println("Successfully saved " + this.analyzedItemsStore.size() + " analyzed items to " + CSV_FILE_NAME);
+            // Clear the in-memory store after saving if you only want to save new items each run
+            // this.analyzedItemsStore.clear(); // Optional: if you want each run to have its own distinct set in memory until shutdown.
+
+        } catch (IOException e) {
+            System.err.println("Error writing analyzed items to CSV file " + CSV_FILE_NAME + ": " + e.getMessage());
+        }
+        System.out.println("--- End of Analyzed Items Processing ---");
     }
+
 
     public static void main(String[] args) {
         int portArg = DEFAULT_PORT;
@@ -114,12 +150,8 @@ public class NewsAnalyzerServer {
         NewsAnalyzerServer server = new NewsAnalyzerServer(portArg, MAX_THREADS);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("Shutdown hook triggered. Shutting down server and printing analyzed items...");
-            server.printAllAnalyzedItems();
-            // Note: clientExecutor is shut down in the finally block of startServer
-            // or if startServer exits normally. If startServer fails very early,
-            // the shutdown hook might run before clientExecutor is properly handled.
-            // However, the main finally block in startServer should generally cover it.
+            System.out.println("Shutdown hook triggered. Saving and printing analyzed items...");
+            server.saveAndPrintAnalyzedItems();
         }));
 
         server.startServer();
